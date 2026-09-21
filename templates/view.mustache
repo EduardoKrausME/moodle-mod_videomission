@@ -1,0 +1,167 @@
+{{!
+    This file is part of Moodle - https://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template mod_videomission/view
+
+    Example context (json):
+    {
+        Aqui tem que criar o context em inglês
+    }
+}}
+<div class="videomission" data-cmid="{{cmid}}">
+    {{#hasintro}}
+        <div class="videomission-intro mb-4">{{{intro}}}</div>
+    {{/hasintro}}
+
+    <div class="videomission-toolbar mb-3">
+        {{#canmanage}}<a class="btn btn-secondary" href="{{{manageurl}}}">{{#str}}
+            managemissions, mod_videomission{{/str}}</a>{{/canmanage}}
+        {{#canreport}}<a class="btn btn-secondary" href="{{{reporturl}}}">{{#str}}
+            report, mod_videomission{{/str}}</a>{{/canreport}}
+    </div>
+
+    <div class="videomission-layout">
+        <div class="videomission-video-column">
+            {{#sourcevalid}}
+                {{#isdirect}}
+                    <video class="videomission-player" data-role="player" controls preload="metadata"
+                           src="{{{videourl}}}"></video>
+                {{/isdirect}}
+                {{#isyoutube}}
+                    <div class="videomission-embed">
+                        <iframe data-role="youtube" src="{{{youtubeembed}}}"
+                                allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+                    </div>
+                {{/isyoutube}}
+                {{#isvimeo}}
+                    <div class="videomission-embed">
+                        <iframe data-role="vimeo" src="{{{vimeoembed}}}"
+                                allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>
+                    </div>
+                {{/isvimeo}}
+                <div class="videomission-timeline mt-2" data-role="timeline" aria-label="{{videoprogresslabel}}"></div>
+            {{/sourcevalid}}
+            {{^sourcevalid}}
+                <div class="alert alert-warning">{{#str}}invalidvideo, mod_videomission{{/str}}</div>
+            {{/sourcevalid}}
+
+            <div class="videomission-summary mt-3">
+                <div class="d-flex justify-content-between"><strong>{{#str}}
+                    overallprogress, mod_videomission{{/str}}</strong><span
+                        data-role="overall-percentage">{{overallpercentage}}%</span></div>
+                <div class="progress mb-2">
+                    <div class="progress-bar" data-role="overall-progressbar" role="progressbar"
+                         style="width: {{progressvalue}}%" aria-valuenow="{{progressvalue}}" aria-valuemin="0"
+                         aria-valuemax="100"></div>
+                </div>
+                <div data-role="video-progress">{{videoprogresslabel}}</div>
+                <div data-role="mission-progress">{{missionprogresslabel}}</div>
+                <div data-role="mandatory-progress">{{mandatoryprogresslabel}}</div>
+                <div>{{#str}}totalscore, mod_videomission{{/str}}: {{points}} / {{maxpoints}}</div>
+                {{#haswatchgoal}}
+                    <div>{{watchgoallabel}}</div>{{/haswatchgoal}}
+            </div>
+        </div>
+
+        <div class="videomission-missions-column">
+            <h3>{{#str}}missionlist, mod_videomission{{/str}}</h3>
+            {{^hasmissions}}
+                <div class="alert alert-info">{{#str}}nomissions, mod_videomission{{/str}}</div>{{/hasmissions}}
+            {{#missions}}
+                <section
+                        class="videomission-mission {{#completed}}is-completed{{/completed}} {{#locked}}is-locked{{/locked}}"
+                        data-mission-id="{{id}}">
+                    <div class="videomission-mission-head">
+                        <div>
+                            <h4>{{name}}</h4>
+                            <span class="badge badge-secondary">{{#required}}{{#str}}
+                                missionrequired, mod_videomission{{/str}}{{/required}}{{#optional}}{{#str}}
+                                missionoptional, mod_videomission{{/str}}{{/optional}}</span>
+                            <span class="badge badge-light">{{#str}}
+                                missionpoints, mod_videomission, {{points}}{{/str}}</span>
+                        </div>
+                        <span class="videomission-state">{{#completed}}{{#str}}
+                            completed, mod_videomission{{/str}}{{/completed}}{{^completed}}{{#locked}}{{#str}}
+                            locked, mod_videomission{{/str}}{{/locked}}{{^locked}}{{#str}}
+                            pending, mod_videomission{{/str}}{{/locked}}{{/completed}}</span>
+                    </div>
+                    <div class="videomission-mission-description">{{{description}}}</div>
+                    {{#locked}}
+                        <div class="alert alert-light py-2">{{#str}}
+                            missionlocked, mod_videomission{{/str}}</div>{{/locked}}
+                    {{#canrespond}}
+                        {{#ismoment}}
+                            <div class="form-group">
+                                <button type="button" class="btn btn-outline-primary" data-action="set-moment">{{#str}}
+                                    usecurrenttime, mod_videomission{{/str}}</button>
+                                <span class="ml-2" data-role="start-label">{{startlabel}}</span>
+                                <input type="hidden" data-field="starttime" value="{{starttime}}">
+                            </div>
+                        {{/ismoment}}
+                        {{#isinterval}}
+                            <div class="form-group">
+                                <button type="button" class="btn btn-outline-primary" data-action="set-start">{{#str}}
+                                    setstart, mod_videomission{{/str}}</button>
+                                <span class="mx-2" data-role="start-label">{{startlabel}}</span>
+                                <button type="button" class="btn btn-outline-primary" data-action="set-end">{{#str}}
+                                    setend, mod_videomission{{/str}}</button>
+                                <span class="ml-2" data-role="end-label">{{endlabel}}</span>
+                                <input type="hidden" data-field="starttime" value="{{starttime}}">
+                                <input type="hidden" data-field="endtime" value="{{endtime}}">
+                            </div>
+                        {{/isinterval}}
+                        {{#istext}}
+                            <div class="form-group"><label>{{#str}}response, mod_videomission{{/str}}</label><textarea
+                                    class="form-control" rows="4" data-field="response">{{response}}</textarea></div>
+                        {{/istext}}
+                        {{#isobservation}}
+                            <div class="form-group"><label>{{#str}}response, mod_videomission{{/str}}</label><textarea
+                                    class="form-control" rows="4" data-field="response">{{response}}</textarea></div>
+                        {{/isobservation}}
+                        {{#isoccurrences}}
+                            <div class="form-group" data-required-count="{{requiredcount}}">
+                                <button type="button" class="btn btn-outline-primary"
+                                        data-action="add-occurrence">{{#str}}
+                                    addoccurrence, mod_videomission{{/str}}</button>
+                                <span class="ml-2">{{#str}}
+                                    requiredcount, mod_videomission{{/str}}: {{requiredcount}}</span>
+                                <input type="hidden" data-field="occurrences" value="{{occurrencesjson}}">
+                                <ul class="videomission-occurrences mt-2" data-role="occurrence-list">
+                                    {{#occurrences}}
+                                        <li data-time="{{time}}"><span>{{label}}</span>
+                                            <button type="button" class="btn btn-link p-0 ml-2"
+                                                    data-action="remove-occurrence">{{#str}}
+                                                removeoccurrence, mod_videomission{{/str}}</button>
+                                        </li>{{/occurrences}}
+                                </ul>
+                            </div>
+                        {{/isoccurrences}}
+                        {{#isconfirm}}
+                            <div class="form-check mb-2"><input class="form-check-input" type="checkbox"
+                                                                data-field="confirmed"
+                                                                {{#confirmed}}checked{{/confirmed}}> <label
+                                    class="form-check-label">{{#str}}confirmtask, mod_videomission{{/str}}</label></div>
+                        {{/isconfirm}}
+                        <button type="button" class="btn btn-primary" data-action="save-mission">{{#str}}
+                            savemission, mod_videomission{{/str}}</button>
+                        <span class="videomission-save-status ml-2" data-role="save-status" aria-live="polite"></span>
+                    {{/canrespond}}
+                </section>
+            {{/missions}}
+        </div>
+    </div>
+</div>

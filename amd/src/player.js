@@ -1,0 +1,461 @@
+// This file is part of Moodle - http://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
+/**
+ * player.js
+ *
+ * @package   mod_videomission
+ * @copyright 2026 Eduardo Kraus {@link https://eduardokraus.com}
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
+define(['core/ajax', 'core/notification'], function (Ajax, Notification) {
+    const state = {
+        config: null,
+        root: null,
+        direct: null,
+        youtube: null,
+        vimeo: null,
+        current: 0,
+        duration: 0,
+        playing: false,
+        ranges: [],
+        playtime: 0,
+        lastTick: 0,
+        lastSave: 0,
+        maxSeen: 0,
+    };
+
+    const formatTime = seconds => {
+        const value = Math.max(0, Math.round(Number(seconds) || 0));
+        const hours = Math.floor(value / 3600);
+        const minutes = Math.floor((value % 3600) / 60);
+        const secs = value % 60;
+        if (hours > 0) {
+            return hours + ':' + String(minutes).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+        }
+        return minutes + ':' + String(secs).padStart(2, '0');
+    };
+
+    const normalizeRanges = ranges => {
+        const clean = (Array.isArray(ranges) ? ranges : []).map(range => [
+            Math.max(0, Number(range[0]) || 0),
+            Math.max(0, Number(range[1]) || 0),
+        ]).filter(range => range[1] > range[0]).sort((a, b) => a[0] - b[0]);
+        const merged = [];
+        clean.forEach(range => {
+            const last = merged[merged.length - 1];
+            if (last && range[0] <= last[1] + 0.75) {
+                last[1] = Math.max(last[1], range[1]);
+            } else {
+                merged.push(range);
+            }
+        });
+        return merged;
+    };
+
+    const addRange = (start, end) => {
+        state.ranges.push([Math.max(0, start), Math.max(0, end)]);
+        state.ranges = normalizeRanges(state.ranges);
+        state.maxSeen = state.ranges.reduce((max, range) => Math.max(max, range[1]), state.maxSeen);
+    };
+
+    const drawTimeline = () => {
+        const timeline = state.root ? state.root.querySelector('[data-role="timeline"]') : null;
+        if (!timeline || state.duration <= 0) {
+            return;
+        }
+        while (timeline.firstChild) {
+            timeline.removeChild(timeline.firstChild);
+        }
+        state.ranges.forEach(range => {
+            const segment = document.createElement('span');
+            segment.className = 'videomission-timeline-segment';
+            segment.style.left = (Math.max(0, range[0]) / state.duration * 100) + '%';
+            segment.style.width = (Math.max(0, range[1] - range[0]) / state.duration * 100) + '%';
+            timeline.appendChild(segment);
+        });
+    };
+
+    const saveProgress = () => {
+        if (!state.config || state.duration <= 0) {
+            return;
+        }
+        state.lastSave = Date.now();
+        Ajax.call([{
+            methodname: 'mod_videomission_save_progress',
+            args: {
+                cmid: state.config.cmid,
+                duration: state.duration,
+                position: state.current,
+                playtime: state.playtime,
+                ranges: JSON.stringify(normalizeRanges(state.ranges)),
+            },
+        }])[0].then(result => {
+            const overall = state.root.querySelector('[data-role="overall-percentage"]');
+            const bar = state.root.querySelector('[data-role="overall-progressbar"]');
+            const video = state.root.querySelector('[data-role="video-progress"]');
+            if (overall) {
+                overall.textContent = Number(result.overall).toFixed(1) + '%';
+            }
+            if (bar) {
+                bar.style.width = result.overall + '%';
+                bar.setAttribute('aria-valuenow', result.overall);
+            }
+            if (video) {
+                video.textContent = result.videoprogress;
+            }
+            return result;
+        }).catch(Notification.exception);
+    };
+
+    const tick = () => {
+        const now = Date.now();
+        if (!state.lastTick) {
+            state.lastTick = now;
+        }
+        const delta = Math.min(2, Math.max(0, (now - state.lastTick) / 1000));
+        state.lastTick = now;
+        if (state.playing && state.current >= 0 && state.duration > 0) {
+            state.playtime += delta;
+            addRange(Math.max(0, state.current - Math.max(1.25, delta + 0.25)), Math.min(state.duration, state.current + 0.3));
+            drawTimeline();
+        }
+        if (state.playing && Date.now() - state.lastSave > 12000) {
+            saveProgress();
+        }
+    };
+
+    const directSetup = () => {
+        state.direct = state.root.querySelector('[data-role="player"]');
+        if (!state.direct) {
+            return;
+        }
+        state.direct.addEventListener('loadedmetadata', () => {
+            state.duration = Number(state.direct.duration) || 0;
+            if (state.config.resume && state.config.lastposition > 0 && state.config.lastposition < state.duration - 2) {
+                state.direct.currentTime = state.config.lastposition;
+            }
+            drawTimeline();
+        });
+        state.direct.addEventListener('play', () => {
+            state.playing = true;
+            state.current = state.direct.currentTime;
+        });
+        state.direct.addEventListener('pause', () => {
+            state.playing = false;
+            state.current = state.direct.currentTime;
+            saveProgress();
+        });
+        state.direct.addEventListener('ended', () => {
+            state.playing = false;
+            state.current = state.direct.currentTime;
+            saveProgress();
+        });
+        state.direct.addEventListener('timeupdate', () => {
+            state.current = state.direct.currentTime;
+            state.duration = Number(state.direct.duration) || state.duration;
+        });
+        state.direct.addEventListener('seeking', () => {
+            if (!state.config.restrictseek) {
+                return;
+            }
+            const allowed = Math.max(state.maxSeen + 3, state.config.lastposition + 3);
+            if (state.direct.currentTime > allowed) {
+                state.direct.currentTime = Math.max(0, allowed);
+            }
+        });
+    };
+
+    const loadScript = src => new Promise((resolve, reject) => {
+        const existing = document.querySelector('script[src="' + src + '"]');
+        if (existing) {
+            if (existing.dataset.loaded === '1') {
+                resolve();
+            } else {
+                existing.addEventListener('load', resolve, {once: true});
+                existing.addEventListener('error', reject, {once: true});
+            }
+            return;
+        }
+        const script = document.createElement('script');
+        script.src = src;
+        script.async = true;
+        script.addEventListener('load', () => {
+            script.dataset.loaded = '1';
+            resolve();
+        }, {once: true});
+        script.addEventListener('error', reject, {once: true});
+        document.head.appendChild(script);
+    });
+
+    const youtubeSetup = () => {
+        const iframe = state.root.querySelector('[data-role="youtube"]');
+        if (!iframe) {
+            return;
+        }
+        loadScript('https://www.youtube.com/iframe_api').then(() => new Promise(resolve => {
+            const ready = () => {
+                if (window.YT && window.YT.Player) {
+                    resolve();
+                } else {
+                    window.setTimeout(ready, 100);
+                }
+            };
+            ready();
+        })).then(() => {
+            state.youtube = new window.YT.Player(iframe, {
+                events: {
+                    onReady: event => {
+                        state.duration = Number(event.target.getDuration()) || 0;
+                        if (state.config.resume && state.config.lastposition > 0 && state.config.lastposition < state.duration - 2) {
+                            event.target.seekTo(state.config.lastposition, true);
+                        }
+                        drawTimeline();
+                    },
+                    onStateChange: event => {
+                        state.playing = event.data === window.YT.PlayerState.PLAYING;
+                        if (!state.playing && state.youtube) {
+                            state.current = Number(state.youtube.getCurrentTime()) || state.current;
+                            saveProgress();
+                        }
+                    },
+                },
+            });
+            window.setInterval(() => {
+                if (!state.youtube || typeof state.youtube.getCurrentTime !== 'function') {
+                    return;
+                }
+                const current = Number(state.youtube.getCurrentTime()) || 0;
+                if (state.config.restrictseek && state.playing) {
+                    const allowed = Math.max(state.maxSeen + 3, state.config.lastposition + 3);
+                    if (current > allowed) {
+                        state.youtube.seekTo(allowed, true);
+                        state.current = allowed;
+                        return;
+                    }
+                }
+                state.current = current;
+                state.duration = Number(state.youtube.getDuration()) || state.duration;
+            }, 500);
+            return state.youtube;
+        }).catch(Notification.exception);
+    };
+
+    const vimeoSetup = () => {
+        const iframe = state.root.querySelector('[data-role="vimeo"]');
+        if (!iframe) {
+            return;
+        }
+        loadScript('https://player.vimeo.com/api/player.js').then(() => {
+            state.vimeo = new window.Vimeo.Player(iframe);
+            return state.vimeo.getDuration();
+        }).then(duration => {
+            state.duration = Number(duration) || 0;
+            drawTimeline();
+            if (state.config.resume && state.config.lastposition > 0 && state.config.lastposition < state.duration - 2) {
+                return state.vimeo.setCurrentTime(state.config.lastposition);
+            }
+            return null;
+        }).then(() => {
+            state.vimeo.on('play', () => {
+                state.playing = true;
+            });
+            state.vimeo.on('pause', data => {
+                state.playing = false;
+                state.current = Number(data.seconds) || state.current;
+                saveProgress();
+            });
+            state.vimeo.on('ended', data => {
+                state.playing = false;
+                state.current = Number(data.seconds) || state.current;
+                saveProgress();
+            });
+            state.vimeo.on('timeupdate', data => {
+                const current = Number(data.seconds) || 0;
+                if (state.config.restrictseek && state.playing) {
+                    const allowed = Math.max(state.maxSeen + 3, state.config.lastposition + 3);
+                    if (current > allowed) {
+                        state.vimeo.setCurrentTime(allowed);
+                        state.current = allowed;
+                        return;
+                    }
+                }
+                state.current = current;
+                state.duration = Number(data.duration) || state.duration;
+            });
+            return state.vimeo;
+        }).catch(Notification.exception);
+    };
+
+    const readNumber = (card, selector) => {
+        const field = card.querySelector(selector);
+        if (!field || field.value === '') {
+            return -1;
+        }
+        return Number(field.value);
+    };
+
+    const saveMission = card => {
+        const missionid = Number(card.dataset.missionId);
+        const response = card.querySelector('[data-field="response"]');
+        const confirmed = card.querySelector('[data-field="confirmed"]');
+        const occurrences = card.querySelector('[data-field="occurrences"]');
+        const status = card.querySelector('[data-role="save-status"]');
+        Ajax.call([{
+            methodname: 'mod_videomission_save_mission',
+            args: {
+                cmid: state.config.cmid,
+                missionid: missionid,
+                response: response ? response.value : '',
+                starttime: readNumber(card, '[data-field="starttime"]'),
+                endtime: readNumber(card, '[data-field="endtime"]'),
+                occurrences: occurrences ? occurrences.value : '[]',
+                confirmed: confirmed && confirmed.checked ? 1 : 0,
+            },
+        }])[0].then(result => {
+            if (status) {
+                status.textContent = result.message;
+            }
+            card.classList.toggle('is-completed', Boolean(result.completed));
+            const overall = state.root.querySelector('[data-role="overall-percentage"]');
+            const bar = state.root.querySelector('[data-role="overall-progressbar"]');
+            const missionProgress = state.root.querySelector('[data-role="mission-progress"]');
+            const mandatoryProgress = state.root.querySelector('[data-role="mandatory-progress"]');
+            if (overall) {
+                overall.textContent = Number(result.overall).toFixed(1) + '%';
+            }
+            if (bar) {
+                bar.style.width = result.overall + '%';
+                bar.setAttribute('aria-valuenow', result.overall);
+            }
+            if (missionProgress) {
+                missionProgress.textContent = result.missionprogress;
+            }
+            if (mandatoryProgress) {
+                mandatoryProgress.textContent = result.mandatoryprogress;
+            }
+            if (state.config.sequential && result.completed) {
+                window.location.reload();
+            }
+            return result;
+        }).catch(Notification.exception);
+    };
+
+    const updateOccurrenceField = card => {
+        const field = card.querySelector('[data-field="occurrences"]');
+        if (!field) {
+            return;
+        }
+        const values = Array.from(card.querySelectorAll('[data-role="occurrence-list"] li')).map(item => Number(item.dataset.time));
+        field.value = JSON.stringify(values);
+    };
+
+    const appendOccurrence = (card, seconds) => {
+        const list = card.querySelector('[data-role="occurrence-list"]');
+        if (!list) {
+            return;
+        }
+        const item = document.createElement('li');
+        item.dataset.time = seconds;
+        const label = document.createElement('span');
+        label.textContent = formatTime(seconds);
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'btn btn-link p-0 ml-2';
+        button.dataset.action = 'remove-occurrence';
+        button.textContent = '×';
+        item.appendChild(label);
+        item.appendChild(button);
+        list.appendChild(item);
+        updateOccurrenceField(card);
+    };
+
+    const bindMissions = () => {
+        state.root.addEventListener('click', event => {
+            const action = event.target.closest('[data-action]');
+            if (!action) {
+                return;
+            }
+            const card = action.closest('[data-mission-id]');
+            if (!card) {
+                return;
+            }
+            switch (action.dataset.action) {
+                case 'set-moment':
+                case 'set-start': {
+                    const field = card.querySelector('[data-field="starttime"]');
+                    const label = card.querySelector('[data-role="start-label"]');
+                    if (field) {
+                        field.value = state.current;
+                    }
+                    if (label) {
+                        label.textContent = formatTime(state.current);
+                    }
+                    break;
+                }
+                case 'set-end': {
+                    const field = card.querySelector('[data-field="endtime"]');
+                    const label = card.querySelector('[data-role="end-label"]');
+                    if (field) {
+                        field.value = state.current;
+                    }
+                    if (label) {
+                        label.textContent = formatTime(state.current);
+                    }
+                    break;
+                }
+                case 'add-occurrence':
+                    appendOccurrence(card, state.current);
+                    break;
+                case 'remove-occurrence': {
+                    const item = action.closest('li');
+                    if (item) {
+                        item.remove();
+                        updateOccurrenceField(card);
+                    }
+                    break;
+                }
+                case 'save-mission':
+                    saveMission(card);
+                    break;
+            }
+        });
+    };
+
+    const init = config => {
+        state.config = config;
+        state.root = document.querySelector('.videomission[data-cmid="' + config.cmid + '"]');
+        if (!state.root) {
+            return;
+        }
+        state.ranges = normalizeRanges(config.ranges || []);
+        state.playtime = Number(config.playtime) || 0;
+        state.current = Number(config.lastposition) || 0;
+        state.maxSeen = state.ranges.reduce((max, range) => Math.max(max, range[1]), state.current);
+        state.lastSave = Date.now();
+        bindMissions();
+        if (config.source === 'upload' || config.source === 'url') {
+            directSetup();
+        } else if (config.source === 'youtube') {
+            youtubeSetup();
+        } else if (config.source === 'vimeo') {
+            vimeoSetup();
+        }
+        window.setInterval(tick, 1000);
+    };
+
+    return {init: init};
+});
