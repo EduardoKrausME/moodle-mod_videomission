@@ -61,7 +61,7 @@ class save_mission extends external_api {
      * @param bool $confirmed Parameter confirmed.
      * @return array Return value.
      */
-    public static function execute(int    $cmid, int $missionid, string $response, float $starttime, float $endtime,
+    public static function execute(int $cmid, int $missionid, string $response, float $starttime, float $endtime,
                                    string $occurrences, bool $confirmed): array {
         global $CFG, $DB, $USER;
         require_once($CFG->dirroot . '/mod/videomission/lib.php');
