@@ -100,3 +100,8 @@
         position: static;
     }
 }
+/* Do not shrink the primary video because of the viewport height. */
+.videomission-player {
+    width: 100%;
+    max-height: none;
+}
