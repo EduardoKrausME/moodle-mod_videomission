@@ -35,7 +35,7 @@ $PAGE->set_heading($course->fullname);
 
 $instances = get_all_instances_in_course('videomission', $course);
 $table = new html_table();
-$table->head = [get_string('name'), get_string('intro')];
+$table->head = [get_string('name'), get_string('description')];
 foreach ($instances as $instance) {
     $url = new moodle_url('/mod/videomission/view.php', ['id' => $instance->coursemodule]);
     $table->data[] = [html_writer::link($url, format_string($instance->name)),

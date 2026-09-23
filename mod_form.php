@@ -44,7 +44,7 @@ class mod_videomission_mod_form extends moodleform_mod {
         $mform->addRule('name', null, 'required', null, 'client');
         $this->standard_intro_elements();
 
-        $mform->addElement('header', 'videosource', get_string('source', 'mod_videomission'));
+        $mform->addElement('html', '<h3>' . get_string('source', 'mod_videomission') . '</h3>');
         $sources = [
             'upload' => get_string('sourceupload', 'mod_videomission'),
             'url' => get_string('sourceurl', 'mod_videomission'),
@@ -56,7 +56,6 @@ class mod_videomission_mod_form extends moodleform_mod {
 
         $mform->addElement('filemanager', 'video', get_string('videofile', 'mod_videomission'), null, [
             'subdirs' => 0,
-            'maxfiles' => 1,
             'accepted_types' => ['video'],
         ]);
         $mform->addHelpButton('video', 'videofile', 'mod_videomission');
@@ -67,7 +66,7 @@ class mod_videomission_mod_form extends moodleform_mod {
         $mform->addHelpButton('videourl', 'videourl', 'mod_videomission');
         $mform->hideIf('videourl', 'sourcetype', 'eq', 'upload');
 
-        $mform->addElement('header', 'trackingheader', get_string('tracking', 'mod_videomission'));
+        $mform->addElement('html', '<h3>' . get_string('tracking', 'mod_videomission') . '</h3>');
         $mform->addElement('select', 'requiredwatch', get_string('requiredwatch', 'mod_videomission'),
             array_combine(range(0, 100, 5), array_map(static fn($v) => $v . '%', range(0, 100, 5))));
         $mform->setDefault('requiredwatch', 80);
@@ -154,6 +153,15 @@ class mod_videomission_mod_form extends moodleform_mod {
         }
         if (isset($data['grade']) && (float)$data['grade'] < 0) {
             $errors['grade'] = get_string('error');
+        }
+        foreach (['video'] as $field) {
+            $draftid = (int)($data[$field] ?? 0);
+            if ($draftid > 0) {
+                $draftinfo = file_get_draft_area_info($draftid);
+                if ((int)$draftinfo['filecount'] > 1) {
+                    $errors[$field] = get_string('errormaxfiles', 'videomission');
+                }
+            }
         }
         return $errors;
     }
