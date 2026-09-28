@@ -44,7 +44,11 @@ class mission_manager {
     /** @var string */
     public const TYPE_CONFIRM = 'confirm';
 
-    /** @return string[] */
+    /**
+     * Function types
+     *
+     * @return string[]
+     */
     public static function types(): array {
         return [
             self::TYPE_MOMENT,
