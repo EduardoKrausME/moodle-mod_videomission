@@ -17,10 +17,10 @@
 namespace mod_videomission\external;
 
 use context_module;
-use external_api;
-use external_function_parameters;
-use external_single_structure;
-use external_value;
+use core_external\external_api;
+use core_external\external_function_parameters;
+use core_external\external_single_structure;
+use core_external\external_value;
 use mod_videomission\mission_manager;
 use mod_videomission\progress_manager;
 
