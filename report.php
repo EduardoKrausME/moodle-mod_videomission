@@ -67,8 +67,10 @@ foreach ($users as $user) {
         }
         $occurrences = json_decode((string)$answer->occurrences, true);
         if (is_array($occurrences) && $occurrences) {
-            $parts[] = implode(', ', array_map(static fn($value):
-            string => videomission_format_seconds((float)$value), $occurrences));
+            $parts[] = implode(', ', array_map(
+                static fn($value): string => videomission_format_seconds((float)$value),
+                $occurrences
+            ));
         }
         $details[] = format_string($mission->name) . ': ' . ($parts ? implode(' | ', $parts) :
                 (!empty($answer->completed) ?
